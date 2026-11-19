@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>康兴煤厂机械计时记录</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+  :root{
+    --bg:#f3f1ea; --paper:#ffffff; --ink:#1f2328; --muted:#6b7280; --line:#d9d4c7;
+    --loader:#cfe3c0; --loader-ink:#2f5d2a; --pusher:#f6e6b4; --pusher-ink:#7a5a12;
+    --accent:#3d6b35; --accent-dark:#2f5529; --danger:#b42318; --radius:12px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:16px;line-height:1.5;
+    padding-bottom:calc(88px + env(safe-area-inset-bottom, 0px));
+    overflow-x:hidden;
+  }
+  .wrap{max-width:520px;margin:0 auto;padding:12px 12px 24px;}
+  .header{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px;}
+  .header h1{font-size:17px;margin:0 0 12px;font-weight:700;text-align:center;}
+  /* 小屏单列，字段更舒展 */
+  .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .meta-grid .wide{grid-column:1 / -1;}
+  .field{display:flex;flex-direction:column;gap:4px;min-width:0;}
+  label{font-size:13px;color:var(--muted);}
+  input,select,textarea{
+    width:100%;min-height:46px;border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;font-size:16px;background:#fff;color:var(--ink);
+    transition:border-color .2s;
+    -webkit-appearance:none;appearance:none;
+  }
+  textarea{min-height:72px;resize:vertical;}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent);}
+  /* 时间选择器：两行布局，避免小屏挤压 */
+  .time-picker-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;}
+  .time-picker-row select{text-align:center;padding-left:4px;padding-right:4px;}
+  .time-picker-row span{color:var(--muted);font-size:14px;}
+  .export-options{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;background:#f9f9f9;border-radius:8px;border:1px dashed var(--line);}
+  .export-options input[type="checkbox"]{width:20px;height:20px;min-height:auto;cursor:pointer;accent-color:var(--accent);flex-shrink:0;}
+  .export-options label{font-size:14px;color:var(--ink);cursor:pointer;user-select:none;}
+  /* 类型切换 */
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0;}
+  .seg button{min-height:52px;border:1px solid var(--line);background:#fff;border-radius:12px;font-size:17px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;}
+  .seg button.active-loader{background:var(--loader);color:var(--loader-ink);border-color:var(--loader);}
+  .seg button.active-pusher{background:var(--pusher);color:var(--pusher-ink);border-color:var(--pusher);}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px;}
+  .card h2{font-size:15px;margin:0 0 12px;font-weight:700;}
+  .form-grid{display:grid;grid-template-columns:1fr;gap:12px;}
+  .time-field{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:stretch;}
+  .time-field input{min-height:48px;}
+  .time-field .ghost{min-height:48px;padding:0 16px;font-size:15px;white-space:nowrap;}
+  .duration-preview{margin-top:12px;padding:12px;border-radius:10px;background:#f7f5ee;font-size:15px;display:flex;justify-content:space-between;align-items:center;}
+  .duration-preview b{font-variant-numeric:tabular-nums;}
+  .btn-row{display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px;}
+  button.primary{min-height:52px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:17px;font-weight:700;cursor:pointer;transition:background .15s;}
+  button.primary:active{background:var(--accent-dark);transform:scale(.99);}
+  button.ghost{min-height:44px;border:1px solid var(--line);background:#fff;border-radius:10px;color:var(--ink);font-size:15px;cursor:pointer;}
+  button.ghost:active{background:#f0f0f0;}
+  /* 汇总 */
+  .summary{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+  .sum-box{border-radius:var(--radius);padding:12px 14px;border:1px solid var(--line);background:var(--paper);}
+  .sum-box.loader{background:var(--loader);border-color:rgba(47,93,42,0.2);}
+  .sum-box.pusher{background:var(--pusher);border-color:rgba(122,90,18,0.2);}
+  .sum-box .label{font-size:12px;font-weight:600;opacity:.85;}
+  .sum-box .value{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap;}
+  /* 列表头部 + 筛选 */
+  .list-head{display:flex;justify-content:space-between;align-items:center;margin:6px 2px 10px;}
+  .list-head h2{font-size:15px;margin:0;}
+  .filters{display:flex;gap:6px;}
+  .filters button{border:1px solid var(--line);background:#fff;border-radius:8px;min-height:36px;padding:0 12px;font-size:13px;color:var(--muted);cursor:pointer;}
+  .filters button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  /* 记录卡片：手机端分行排，信息不挤 */
+  .record{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;}
+  .record-top{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .record-name{font-weight:700;font-size:16px;}
+  .record-type{font-size:12px;padding:3px 10px;border-radius:999px;font-weight:600;flex-shrink:0;}
+  .record-type.loader{background:var(--loader);color:var(--loader-ink);}
+  .record-type.pusher{background:var(--pusher);color:var(--pusher-ink);}
+  .record-job{margin-top:6px;font-size:15px;word-break:break-all;}
+  .record-time{margin-top:8px;color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .record-duration{font-weight:700;color:var(--ink);}
+  .record-duration.ongoing{color:#1D4ED8;}
+  .record-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
+  .record-actions button{border:1px solid var(--line);background:#fff;border-radius:10px;min-height:42px;font-size:14px;cursor:pointer;}
+  .record-actions .del{color:var(--danger);border-color:#f3c2bd;background:#fff5f5;}
+  .empty{text-align:center;color:var(--muted);padding:32px 10px;font-size:14px;}
+  /* 底部固定栏：适配 iPhone 安全区 */
+  .footer-bar{position:fixed;left:0;right:0;bottom:0;background:var(--paper);border-top:1px solid var(--line);padding:10px 12px calc(10px + env(safe-area-inset-bottom, 0px));box-shadow:0 -2px 10px rgba(0,0,0,.05);}
+  .footer-inner{max-width:520px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .footer-bar button{min-height:46px;border:1px solid var(--line);background:#fff;border-radius:10px;font-size:14px;cursor:pointer;font-weight:500;}
+  .footer-bar button.danger{color:var(--danger);border-color:#f3c2bd;background:#fff5f5;}
+  /* 较宽屏幕恢复双列表单 */
+  @media (min-width:480px){
+    .form-grid{grid-template-columns:1fr 1fr;}
+    .form-grid .wide{grid-column:1 / -1;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="header">
+    <h1>康兴煤厂机械（铲车计时）工作总结</h1>
+    <div class="meta-grid">
+      <div class="field"><label for="shiftDate">日期</label><input type="date" id="shiftDate"></div>
+      <div class="field"><label for="shiftName">班次</label><select id="shiftName"><option value="白班">白班</option><option value="夜班">夜班</option></select></div>
+      <div class="field wide"><label for="onDuty">当班人员</label><input type="text" id="onDuty" placeholder="如：郭鹏鹏"></div>
+      <div class="field wide">
+        <label>当班时间</label>
+        <div class="time-picker-row">
+          <select id="shiftTimeStart"></select><span>至</span><select id="shiftTimeEnd"></select>
+        </div>
+      </div>
+      <div class="field wide">
+        <label for="dailyNote">今日工作内容</label>
+        <textarea id="dailyNote" placeholder="填写今日工作概述、设备情况、问题等"></textarea>
+        <div class="export-options">
+          <input type="checkbox" id="exportNote">
+          <label for="exportNote">导出时包含今日工作内容</label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="summary">
+    <div class="sum-box loader"><div class="label">铲车总作业时长</div><div class="value" id="sumLoader">0.0 小时</div></div>
+    <div class="sum-box pusher"><div class="label">推煤机总作业时长</div><div class="value" id="sumPusher">0.0 小时</div></div>
+  </section>
+
+  <div class="seg" id="typeSeg">
+    <button type="button" data-type="loader" class="active-loader">铲车</button>
+    <button type="button" data-type="pusher">推煤机</button>
+  </div>
+
+  <section class="card">
+    <h2 id="formTitle">铲车作业记录</h2>
+    <div class="form-grid">
+      <div class="field"><label for="person">人员</label><input type="text" id="person" list="personList" placeholder="姓名"><datalist id="personList"></datalist></div>
+      <div class="field"><label for="job">作业内容</label><input type="text" id="job" list="jobList" placeholder="如：3号铲车北煤厂配煤"><datalist id="jobList"></datalist></div>
+      <div class="field">
+        <label for="startTime">开始时间</label>
+        <div class="time-field">
+          <input type="time" id="startTime">
+          <button type="button" class="ghost" id="fillStartNow">现在</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="endTime">结束时间</label>
+        <div class="time-field">
+          <input type="time" id="endTime">
+          <button type="button" class="ghost" id="fillEndNow">现在</button>
+        </div>
+      </div>
+    </div>
+    <div class="duration-preview"><span>本次时长</span><b id="durationPreview">—</b></div>
+    <div class="btn-row">
+      <button type="button" class="primary" id="addBtn">保存记录</button>
+    </div>
+  </section>
+
+  <div class="list-head">
+    <h2>记录列表</h2>
+    <div class="filters" id="filterSeg">
+      <button data-filter="all" class="active">全部</button>
+      <button data-filter="loader">铲车</button>
+      <button data-filter="pusher">推煤机</button>
+    </div>
+  </div>
+
+  <div id="recordList"></div>
+</div>
+
+<div class="footer-bar">
+  <div class="footer-inner">
+    <button id="copyTxt">复制文本</button>
+    <button id="exportXlsx">导出Excel</button>
+    <button id="clearAll" class="danger">清空记录</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var STORAGE_KEY = "kangxing_timer_records_v2";
+  var META_KEY = "kangxing_timer_meta_v2";
+  var DEFAULT_PEOPLE = ["孙伟涛","段一清","王东","刘东","周光来","刘伟","谢辉","刘龙刚","王小军","郭鹏鹏"];
+  var DEFAULT_JOBS = [
+    "3号铲车北煤厂配煤","5号铲车煤厂内配煤","5号铲车配煤","1号铲车端石子煤",
+    "端灰","全渣","2号铲车全石膏","1号铲车南煤厂装车","1号铲车2号炉渣仓煤灰",
+    "2号铲车装泥","5号铲车煤棚北配煤","2号铲车全石膏后装渣","1号铲车2号炉渣仓换灰",
+    "1号铲车2号炉渣仓接灰","1号铲车南煤厂装车","2号铲车北煤场二台卸车","3号铲车北煤厂二台卸车",
+    "2号铲车渣厂装渣","3号铲车端石子煤","5号南门装车","2号铲车北煤厂配煤","1号铲车煤台卸车",
+    "推煤机上煤","推煤机北煤场干活"
+  ];
+  var state = {
+    type: "loader",
+    filter: "all",
+    records: [],
+    meta: { date:"", shift:"白班", onDuty:"", shiftTime:"", dailyNote:"" }
+  };
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s).replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function fmtHours(m){ if(!m||m<=0) return "0.0"; return (m/60).toFixed(1); }
+  function nowTime(){ var d=new Date(); return (d.getHours()<10?"0":"")+d.getHours()+":"+(d.getMinutes()<10?"0":"")+d.getMinutes(); }
+  function calcMinutes(start, end){
+    if(!start || !end) return 0;
+    var s=start.split(":"), e=end.split(":");
+    if(s.length<2 || e.length<2) return 0;
+    var sh=parseInt(s[0],10), sm=parseInt(s[1],10);
+    var eh=parseInt(e[0],10), em=parseInt(e[1],10);
+    if(isNaN(sh)||isNaN(sm)||isNaN(eh)||isNaN(em)) return 0;
+    var m1=sh*60+sm, m2=eh*60+em;
+    if(m2<m1) m2+=1440;
+    return m2-m1;
+  }
+  function save(){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.records));
+      localStorage.setItem(META_KEY, JSON.stringify(state.meta));
+    }catch(e){}
+  }
+  function load(){
+    try{
+      var d = localStorage.getItem(STORAGE_KEY);
+      var m = localStorage.getItem(META_KEY);
+      if(d) state.records = JSON.parse(d);
+      if(m) state.meta = JSON.parse(m);
+    }catch(e){}
+    if(!state.meta.date) state.meta.date = new Date().toISOString().slice(0,10);
+  }
+  function readForm(){
+    return {
+      person: $("person").value.trim(),
+      job: $("job").value.trim(),
+      start: $("startTime").value,
+      end: $("endTime").value
+    };
+  }
+  function setType(t){
+    state.type = t;
+    document.querySelectorAll('#typeSeg button').forEach(function(b){
+      b.className = b.getAttribute("data-type") === t ? (t==='loader'?'active-loader':'active-pusher') : '';
+    });
+    $("formTitle").textContent = (t==='loader'?"铲车":"推煤机") + "作业记录";
+    updatePreview();
+  }
+  function updateDatalists(){
+    var pSet = {}, jSet = {};
+    DEFAULT_PEOPLE.forEach(function(n){ pSet[n] = 1; });
+    DEFAULT_JOBS.forEach(function(n){ jSet[n] = 1; });
+    state.records.forEach(function(r){
+      if(r.person) pSet[r.person] = 1;
+      if(r.job) jSet[r.job] = 1;
+    });
+    $("personList").innerHTML = Object.keys(pSet).map(function(n){ return '<option value="'+esc(n)+'">'; }).join("");
+    $("jobList").innerHTML = Object.keys(jSet).map(function(n){ return '<option value="'+esc(n)+'">'; }).join("");
+  }
+  function totals(){
+    var s = {loader:0, pusher:0};
+    state.records.forEach(function(r){
+      if(r.end){
+        var m = calcMinutes(r.start, r.end);
+        if(m > 0){
+          if(r.type === "loader") s.loader += m;
+          else if(r.type === "pusher") s.pusher += m;
+        }
+      }
+    });
+    return s;
+  }
+  function render(){
+    var t = totals();
+    $("sumLoader").textContent = fmtHours(t.loader) + " 小时";
+    $("sumPusher").textContent = fmtHours(t.pusher) + " 小时";
+    renderList();
+    updateDatalists();
+  }
+  function renderList(){
+    var list = $("recordList");
+    var arr = state.records;
+    if(state.filter !== "all") arr = arr.filter(function(r){ return r.type === state.filter; });
+    if(!arr.length){ list.innerHTML = '<div class="empty">暂无记录</div>'; return; }
+    var html = "";
+    arr.forEach(function(r){
+      var durationText = "", ongoing = false;
+      if(r.end) {
+        var min = calcMinutes(r.start, r.end);
+        durationText = (min > 0 ? fmtHours(min) : "0.0") + " 小时";
+      } else {
+        durationText = "仍在作业";
+        ongoing = true;
+      }
+      html += '<div class="record">'+
+        '<div class="record-top"><span class="record-name">'+esc(r.person)+'</span><span class="record-type '+r.type+'">'+(r.type==='loader'?'铲车':'推煤机')+'</span></div>'+
+        '<div class="record-job">'+esc(r.job)+'</div>'+
+        '<div class="record-time"><span>'+r.start+' ~ '+(r.end || '未结束')+'</span><span class="record-duration'+(ongoing?' ongoing':'')+'">'+durationText+'</span></div>'+
+        '<div class="record-actions"><button data-id="'+r.id+'" data-act="edit">修改</button><button data-id="'+r.id+'" data-act="del" class="del">删除</button></div>'+
+      '</div>';
+    });
+    list.innerHTML = html;
+  }
+  function addRecord(){
+    var f = readForm();
+    if(!f.person){ alert("请填写人员姓名"); return; }
+    if(!f.job){ alert("请填写作业内容"); return; }
+    if(!f.start){ alert("请填写开始时间"); return; }
+    var editingId = $("addBtn").getAttribute("data-edit-id");
+    if(editingId){
+      state.records.forEach(function(r){ if(String(r.id) === editingId){ r.person=f.person; r.job=f.job; r.start=f.start; r.end=f.end; r.type=state.type; } });
+      $("addBtn").removeAttribute("data-edit-id");
+      $("addBtn").textContent = "保存记录";
+    } else {
+      state.records.push({ id:Date.now()+""+Math.floor(Math.random()*1000), type:state.type, person:f.person, job:f.job, start:f.start, end:f.end });
+    }
+    save();
+    $("person").value = ""; $("job").value = ""; $("startTime").value = ""; $("endTime").value = "";
+    render();
+  }
+  function editRecord(id){
+    var r = state.records.find(function(x){ return String(x.id) === id; });
+    if(!r) return;
+    setType(r.type);
+    $("person").value = r.person; $("job").value = r.job; $("startTime").value = r.start; $("endTime").value = r.end || "";
+    $("addBtn").setAttribute("data-edit-id", r.id);
+    $("addBtn").textContent = "保存修改";
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+  function delRecord(id){
+    if(!confirm("确定删除这条记录吗？")) return;
+    state.records = state.records.filter(function(x){ return String(x.id) !== id; });
+    save(); render();
+  }
+  function metaFromForm(){
+    state.meta.date = $("shiftDate").value;
+    state.meta.shift = $("shiftName").value;
+    state.meta.onDuty = $("onDuty").value.trim();
+    state.meta.shiftTime = $("shiftTimeStart").value + "-" + $("shiftTimeEnd").value;
+    state.meta.dailyNote = $("dailyNote").value.trim();
+    save();
+  }
+  function updatePreview(){
+    var s = $("startTime").value, e = $("endTime").value;
+    if(!s) { $("durationPreview").textContent = "—"; $("durationPreview").style.color = ""; return; }
+    if(!e) {
+      $("durationPreview").textContent = "进行中...";
+      $("durationPreview").style.color = "#1D4ED8";
+    } else {
+      var min = calcMinutes(s,e);
+      $("durationPreview").textContent = fmtHours(min) + " 小时";
+      $("durationPreview").style.color = "";
+    }
+  }
+  function exportXlsx(){
+    metaFromForm();
+    if(typeof XLSX === "undefined"){ alert("Excel组件加载失败"); return; }
+    var t = totals();
+    var loader = state.records.filter(function(r){ return r.type === "loader"; });
+    var pusher = state.records.filter(function(r){ return r.type === "pusher"; });
+    var max = Math.max(loader.length, pusher.length, 1);
+    var dateStr = state.meta.date || new Date().toISOString().slice(0,10);
+    var shiftStr = state.meta.shift || "未知班次";
+    var personStr = (state.meta.onDuty || "未知人员").replace(/[\\/:*?"<>|]/g, "");
+    var fileName = "铲车推煤机计时_" + dateStr + "_" + shiftStr + "_" + personStr + ".xlsx";
+    var title = "康兴煤厂机械（铲车计时）-"+dateStr+"工作总结";
+    var includeNote = $("exportNote").checked;
+    var borderStyle = { style: "thin", color: { rgb: "D1D5DB" } };
+    var borderFull = { top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle };
+    var styleTitle = { font: { bold: true, sz: 20, name: "微软雅黑", color: { rgb: "111827" } }, alignment: { horizontal: "center", vertical: "center" }, border: { bottom: { style: "medium", color: { rgb: "D1D5DB" } } } };
+    var styleSub = { font: { sz: 11, name: "微软雅黑", color: { rgb: "374151" } }, alignment: { horizontal: "left", vertical: "center" }, fill: { fgColor: { rgb: "F9FAFB" } }, border: borderFull };
+    var styleHeadLoader = { font: { bold: true, color: { rgb: "166534" }, name: "微软雅黑", sz: 12 }, fill: { fgColor: { rgb: "DCFCE7" } }, alignment: { horizontal: "center", vertical: "center" }, border: borderFull };
+    var styleHeadPusher = { font: { bold: true, color: { rgb: "92400E" }, name: "微软雅黑", sz: 12 }, fill: { fgColor: { rgb: "FEF3C7" } }, alignment: { horizontal: "center", vertical: "center" }, border: borderFull };
+    var styleData = { font: { name: "微软雅黑", sz: 11 }, alignment: { vertical: "center" }, border: borderFull };
+    var styleDataAlt = { font: { name: "微软雅黑", sz: 11 }, fill: { fgColor: { rgb: "F9FAFB" } }, alignment: { vertical: "center" }, border: borderFull };
+    var styleSum = { font: { bold: true, name: "微软雅黑", sz: 12, color: { rgb: "9A3412" } }, fill: { fgColor: { rgb: "FFEDD5" } }, alignment: { horizontal: "right", vertical: "center" }, border: borderFull };
+    var styleOngoing = { font: { name: "微软雅黑", sz: 11, color: { rgb: "1D4ED8" }, bold: true }, alignment: { horizontal: "center", vertical: "center" }, border: borderFull };
+    function createCell(val, style) { return { v: val, t: 's', s: style }; }
+    var aoa = [];
+    aoa.push([createCell(title, styleTitle), "", "", "", "", "", "", "", "", ""]);
+    aoa.push([
+      createCell("班次："+state.meta.shift, styleSub), createCell("", styleSub),
+      createCell("当班人员："+state.meta.onDuty, styleSub), createCell("", styleSub), createCell("", styleSub), createCell("", styleSub),
+      createCell("当班时间："+state.meta.shiftTime, styleSub), createCell("", styleSub), createCell("", styleSub), createCell("", styleSub)
+    ]);
+    if(includeNote && state.meta.dailyNote){
+      var noteRow = [];
+      for(var i=0; i<10; i++) noteRow.push(createCell(i===0 ? "今日工作内容："+state.meta.dailyNote : "", styleSub));
+      aoa.push(noteRow);
+    }
+    var groupRow = [];
+    for(var i=0; i<5; i++) groupRow.push(createCell(i===0 ? "铲车" : "", styleHeadLoader));
+    for(var i=0; i<5; i++) groupRow.push(createCell(i===0 ? "推煤机" : "", styleHeadPusher));
+    aoa.push(groupRow);
+    aoa.push([
+      createCell("人员", styleHeadLoader), createCell("作业内容", styleHeadLoader), createCell("开始", styleHeadLoader), createCell("结束", styleHeadLoader), createCell("时长", styleHeadLoader),
+      createCell("人员", styleHeadPusher), createCell("作业内容", styleHeadPusher), createCell("开始", styleHeadPusher), createCell("结束", styleHeadPusher), createCell("时长", styleHeadPusher)
+    ]);
+    for(var i=0;i<max;i++){
+      var l = loader[i], p = pusher[i];
+      var curStyle = (i%2===0) ? styleData : styleDataAlt;
+      var lHVal = "", lHStyle = curStyle;
+      if(l && l.end) { lHVal = fmtHours(calcMinutes(l.start, l.end)); }
+      else if(l) { lHVal = "仍在作业"; lHStyle = styleOngoing; }
+      var pHVal = "", pHStyle = curStyle;
+      if(p && p.end) { pHVal = fmtHours(calcMinutes(p.start, p.end)); }
+      else if(p) { pHVal = "仍在作业"; pHStyle = styleOngoing; }
+      aoa.push([
+        createCell(l?l.person:"", curStyle), createCell(l?l.job:"", curStyle),
+        createCell(l?l.start:"", curStyle), createCell(l?l.end:"", curStyle), createCell(lHVal, lHStyle),
+        createCell(p?p.person:"", curStyle), createCell(p?p.job:"", curStyle),
+        createCell(p?p.start:"", curStyle), createCell(p?p.end:"", curStyle), createCell(pHVal, pHStyle)
+      ]);
+    }
+    aoa.push([
+      createCell("总计：", styleSum), createCell("", styleSum),
+      createCell("铲车合计："+fmtHours(t.loader)+" h", styleSum), createCell("", styleSum), createCell("", styleSum),
+      createCell("推煤机合计："+fmtHours(t.pusher)+" h", styleSum), createCell("", styleSum),
+      createCell("", styleSum), createCell("", styleSum), createCell("", styleSum)
+    ]);
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [{wch:10},{wch:30},{wch:10},{wch:10},{wch:12},{wch:10},{wch:30},{wch:10},{wch:10},{wch:12}];
+    ws["!rows"] = [{hpt:36},{hpt:22}];
+    if(includeNote) ws["!rows"].push({hpt:22});
+    var merges = [{s:{r:0,c:0}, e:{r:0,c:9}},{s:{r:1,c:0},e:{r:1,c:1}},{s:{r:1,c:2},e:{r:1,c:5}},{s:{r:1,c:6},e:{r:1,c:9}}];
+    if(includeNote) merges.push({s:{r:2,c:0},e:{r:2,c:9}});
+    var mergeStartRow = includeNote ? 3 : 2;
+    merges.push({s:{r:mergeStartRow,c:0},e:{r:mergeStartRow,c:4}});
+    merges.push({s:{r:mergeStartRow,c:5},e:{r:mergeStartRow,c:9}});
+    var lastRow = aoa.length - 1;
+    merges.push({s:{r:lastRow,c:0},e:{r:lastRow,c:1}});
+    merges.push({s:{r:lastRow,c:2},e:{r:lastRow,c:4}});
+    merges.push({s:{r:lastRow,c:5},e:{r:lastRow,c:9}});
+    ws["!merges"] = merges;
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "机械计时");
+    XLSX.writeFile(wb, fileName);
+  }
+  function copyTxt(){
+    metaFromForm();
+    var t = totals();
+    var lines = [];
+    lines.push("康兴煤厂机械（铲车计时）工作总结");
+    lines.push("日期："+state.meta.date+"　班次："+state.meta.shift+"　当班人员："+state.meta.onDuty+"　当班时间："+state.meta.shiftTime);
+    if($("exportNote").checked && state.meta.dailyNote) lines.push("今日工作内容："+state.meta.dailyNote);
+    lines.push("");
+    lines.push("【铲车】");
+    state.records.filter(function(r){return r.type==="loader";}).forEach(function(r){
+      var h = r.end ? fmtHours(calcMinutes(r.start,r.end)) : "仍在作业";
+      lines.push([r.person, r.job, r.start, r.end||'未结束', h].join(" | "));
+    });
+    lines.push("");
+    lines.push("【推煤机】");
+    state.records.filter(function(r){return r.type==="pusher";}).forEach(function(r){
+      var h = r.end ? fmtHours(calcMinutes(r.start,r.end)) : "仍在作业";
+      lines.push([r.person, r.job, r.start, r.end||'未结束', h].join(" | "));
+    });
+    lines.push("");
+    lines.push("铲车合计: "+fmtHours(t.loader)+" h　推煤机合计: "+fmtHours(t.pusher)+" h");
+    var text = lines.join("\n");
+    navigator.clipboard.writeText(text).then(function(){ alert("已复制"); }, function(){
+      var ta = document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select();
+      try{ document.execCommand("copy"); alert("已复制"); }catch(e){ alert("复制失败"); }
+      document.body.removeChild(ta);
+    });
+  }
+  function clearAll(){
+    if(!confirm("确定清空所有记录吗？")) return;
+    state.records = []; save(); render();
+  }
+  function bind(){
+    ["shiftTimeStart", "shiftTimeEnd"].forEach(function(id){
+      var sel = $(id);
+      sel.innerHTML = "";
+      for(var h=0; h<=24; h++){
+        var val = (h<10?"0":"") + h + ":00";
+        sel.innerHTML += '<option value="'+val+'">'+val+'</option>';
+      }
+    });
+    $("shiftDate").value = state.meta.date;
+    $("shiftName").value = state.meta.shift;
+    $("dailyNote").value = state.meta.dailyNote;
+    if(!state.meta.onDuty){
+      state.meta.onDuty = "郭鹏鹏";
+      save();
+    }
+    $("onDuty").value = state.meta.onDuty;
+    if(state.meta.shiftTime && state.meta.shiftTime.indexOf("-") > -1){
+      var parts = state.meta.shiftTime.split("-");
+      $("shiftTimeStart").value = parts[0] || "8:00";
+      $("shiftTimeEnd").value = parts[1] || "20:00";
+    } else {
+      $("shiftTimeStart").value = "8:00";
+      $("shiftTimeEnd").value = "20:00";
+    }
+    $("fillStartNow").addEventListener("click", function(){ $("startTime").value=nowTime(); updatePreview(); });
+    $("fillEndNow").addEventListener("click", function(){ $("endTime").value=nowTime(); updatePreview(); });
+    $("addBtn").addEventListener("click", addRecord);
+    ["startTime","endTime"].forEach(function(id){ $(id).addEventListener("input", updatePreview); });
+    document.querySelectorAll('#typeSeg button').forEach(function(b){ b.addEventListener("click", function(){ setType(this.getAttribute("data-type")); }); });
+    document.querySelectorAll('#filterSeg button').forEach(function(b){ b.addEventListener("click", function(){
+      state.filter = this.getAttribute("data-filter");
+      document.querySelectorAll('#filterSeg button').forEach(function(x){x.classList.remove("active");});
+      this.classList.add("active");
+      renderList();
+    }); });
+    $("recordList").addEventListener("click", function(e){
+      var btn = e.target.closest("button"); if(!btn) return;
+      var id = btn.getAttribute("data-id");
+      if(btn.getAttribute("data-act")==='del') delRecord(id);
+      else if(btn.getAttribute("data-act")==='edit') editRecord(id);
+    });
+    ["shiftDate","shiftName","onDuty","dailyNote","shiftTimeStart","shiftTimeEnd"].forEach(function(id){
+      $(id).addEventListener("change", metaFromForm);
+    });
+    $("exportXlsx").addEventListener("click", exportXlsx);
+    $("copyTxt").addEventListener("click", copyTxt);
+    $("clearAll").addEventListener("click", clearAll);
+  }
+  load();
+  bind();
+  setType(state.type);
+  render();
+})();
+</script>
+</body>
+</html>
