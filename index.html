@@ -99,6 +99,13 @@
     .form-grid{grid-template-columns:1fr 1fr;}
     .form-grid .wide{grid-column:1 / -1;}
   }
+  .time-range-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;}
+  .time-range-row span{color:var(--muted);font-size:14px;text-align:center;}
+  .time-range-row input{text-align:center;}
+  .tag-scroll{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:7px;padding:6px 0 4px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .tag-scroll::-webkit-scrollbar{display:none;}
+  .tag-item{flex-shrink:0;border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 13px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;transition:all .15s;user-select:none;}
+  .tag-item:active,.tag-item.selected{background:var(--accent);color:#fff;border-color:var(--accent);}
 </style>
 </head>
 <body>
@@ -108,11 +115,17 @@
     <div class="meta-grid">
       <div class="field"><label for="shiftDate">日期</label><input type="date" id="shiftDate"></div>
       <div class="field"><label for="shiftName">班次</label><select id="shiftName"><option value="白班">白班</option><option value="夜班">夜班</option></select></div>
-      <div class="field wide"><label for="onDuty">当班人员</label><input type="text" id="onDuty" placeholder="如：郭鹏鹏"></div>
+      <div class="field wide">
+        <label for="onDuty">当班人员</label>
+        <input type="text" id="onDuty" placeholder="如：郭鹏鹏" autocomplete="off">
+        <div class="tag-scroll" id="onDutyTags"></div>
+      </div>
       <div class="field wide">
         <label>当班时间</label>
-        <div class="time-picker-row">
-          <select id="shiftTimeStart"></select><span>至</span><select id="shiftTimeEnd"></select>
+        <div class="time-range-row">
+          <input type="time" id="shiftTimeStart" value="08:00">
+          <span>至</span>
+          <input type="time" id="shiftTimeEnd" value="20:00">
         </div>
       </div>
       <div class="field wide">
@@ -139,8 +152,17 @@
   <section class="card">
     <h2 id="formTitle">铲车作业记录</h2>
     <div class="form-grid">
-      <div class="field"><label for="person">人员</label><input type="text" id="person" list="personList" placeholder="姓名"><datalist id="personList"></datalist></div>
-      <div class="field"><label for="job">作业内容</label><input type="text" id="job" list="jobList" placeholder="如：3号铲车北煤厂配煤"><datalist id="jobList"></datalist></div>
+      <div class="field wide">
+        <label for="person">人员</label>
+        <input type="text" id="person" placeholder="姓名" autocomplete="off">
+        <div class="tag-scroll" id="personTags"></div>
+      </div>
+      <div class="field wide">
+        <label for="job">作业内容</label>
+        <input type="text" id="job" placeholder="如：3号铲车北煤厂配煤" autocomplete="off">
+        <div class="tag-scroll" id="jobTags"></div>
+      </div>
+
       <div class="field">
         <label for="startTime">开始时间</label>
         <div class="time-field">
@@ -466,19 +488,35 @@
       document.body.removeChild(ta);
     });
   }
+  function renderTags(containerId, items, inputId){
+    var box = $(containerId);
+    if(!box) return;
+    box.innerHTML = "";
+    items.forEach(function(item){
+      var span = document.createElement("span");
+      span.className = "tag-item";
+      span.textContent = item;
+      span.addEventListener("click", function(){
+        $(inputId).value = item;
+        box.querySelectorAll(".tag-item").forEach(function(t){ t.classList.remove("selected"); });
+        span.classList.add("selected");
+        if(inputId === "startTime" || inputId === "endTime") updatePreview();
+      });
+      box.appendChild(span);
+    });
+  }
+  
+  function initTags(){
+    renderTags("onDutyTags", DEFAULT_PEOPLE, "onDuty");
+    renderTags("personTags", DEFAULT_PEOPLE, "person");
+    renderTags("jobTags", DEFAULT_JOBS, "job");
+  }
   function clearAll(){
     if(!confirm("确定清空所有记录吗？")) return;
     state.records = []; save(); render();
   }
   function bind(){
-    ["shiftTimeStart", "shiftTimeEnd"].forEach(function(id){
-      var sel = $(id);
-      sel.innerHTML = "";
-      for(var h=0; h<=24; h++){
-        var val = (h<10?"0":"") + h + ":00";
-        sel.innerHTML += '<option value="'+val+'">'+val+'</option>';
-      }
-    });
+    initTags();
     $("shiftDate").value = state.meta.date;
     $("shiftName").value = state.meta.shift;
     $("dailyNote").value = state.meta.dailyNote;
@@ -489,10 +527,10 @@
     $("onDuty").value = state.meta.onDuty;
     if(state.meta.shiftTime && state.meta.shiftTime.indexOf("-") > -1){
       var parts = state.meta.shiftTime.split("-");
-      $("shiftTimeStart").value = parts[0] || "8:00";
+      $("shiftTimeStart").value = parts[0] || "08:00";
       $("shiftTimeEnd").value = parts[1] || "20:00";
     } else {
-      $("shiftTimeStart").value = "8:00";
+      $("shiftTimeStart").value = "08:00";
       $("shiftTimeEnd").value = "20:00";
     }
     $("fillStartNow").addEventListener("click", function(){ $("startTime").value=nowTime(); updatePreview(); });
